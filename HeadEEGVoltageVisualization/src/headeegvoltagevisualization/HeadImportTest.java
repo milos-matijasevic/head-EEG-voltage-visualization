@@ -5,6 +5,9 @@
  */
 package headeegvoltagevisualization;
 
+import com.jogamp.graph.geom.Vertex;
+import com.jogamp.newt.event.KeyEvent;
+import com.jogamp.newt.event.KeyListener;
 import com.jogamp.newt.event.MouseEvent;
 import com.jogamp.newt.event.MouseListener;
 import com.jogamp.newt.event.WindowAdapter;
@@ -25,19 +28,26 @@ import com.mokiat.data.front.parser.OBJModel;
 import com.mokiat.data.front.parser.OBJObject;
 import com.mokiat.data.front.parser.OBJParser;
 import com.mokiat.data.front.parser.OBJVertex;
+import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.Buffer;
 import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.awt.Color;
 
 /**
  *
  * @author mm193059m
  */
-public class HeadImportTest implements GLEventListener, MouseListener {
+public class HeadImportTest implements GLEventListener, MouseListener, KeyListener {
 
     private GLWindow prozor; // prozor, drawable objekat
     private static String naslov = "Kocke"; // naslov prozora
@@ -46,7 +56,12 @@ public class HeadImportTest implements GLEventListener, MouseListener {
     private FPSAnimator animator;
     private static OBJModel model;
 
-    float draggx = 0, draggy = 0;
+    private float draggx, draggy;
+    private float ugaox, ugaoy;
+    private static List<OBJVertex> electrodes = new ArrayList<>();
+    private static List<List<Float>> electrodes_values = new ArrayList<>();
+    private int electrodes_idx = 0;
+    float angle_max = 70;
 
     public HeadImportTest() {
         GLProfile glp = GLProfile.getDefault();
@@ -83,6 +98,7 @@ public class HeadImportTest implements GLEventListener, MouseListener {
 		
         prozor.addGLEventListener(this);
         prozor.addMouseListener(this);
+        prozor.addKeyListener(this);
         prozor.setSize(sirinaProzora, visinaProzora);
         prozor.setTitle(naslov);
         prozor.setVisible(true);
@@ -121,7 +137,8 @@ public class HeadImportTest implements GLEventListener, MouseListener {
         gl.glPushMatrix();
 
         gl.glTranslatef(0, 0, -50);
-        gl.glRotatef(60, 0, 1, 0);
+        gl.glRotatef(ugaoy, 1, 0, 0);
+        gl.glRotatef(ugaox, 0, 1, 0);
 
         gl.glBegin(GL2.GL_TRIANGLES);
         int c = 0;
@@ -129,28 +146,38 @@ public class HeadImportTest implements GLEventListener, MouseListener {
             for (OBJMesh mesh : object.getMeshes()) {
                 for (OBJFace face : mesh.getFaces()) {
                     for (OBJDataReference reference : face.getReferences()) {
-                        switch (c) {
-                            case 0:
-                                gl.glColor3f(1, 0, 0);
-                                break;
-                            case 1:
-                                gl.glColor3f(0, 1, 0);
-                                break;
-                            case 2:
-                                gl.glColor3f(0, 0, 1);
-                                break;
-                        }
-                        c = (c + 1) % 3;
-                        //   gl.glColor3f(1, 0, 0);
                         final OBJVertex vertex = model.getVertex(reference);
+                        if (vertex.y > 5) {
+                            float colors[] = findColor(vertex);
+                            switch (c) {
+                                case 0:
+                                    gl.glColor3f(1, 0, 0);
+                                    break;
+                                case 1:
+                                    gl.glColor3f(0, 1, 0);
+                                    break;
+                                case 2:
+                                    gl.glColor3f(0, 0, 1);
+                                    break;
+                            }
+                            c = (c + 1) % 3;
+                            gl.glColor3f(colors[0], colors[1], colors[2]);
+                        } else {
+                            gl.glColor3f(0.945f, 0.761f, 0.49f);
+                        }
                         gl.glVertex3f(vertex.x, vertex.y, vertex.z);
                     }
                 }
             }
         }
-
         gl.glEnd();
 
+//        gl.glBegin(GL2.GL_POINTS);
+//        for (OBJVertex vertex : electrodes) {
+//            gl.glColor3f(0, 0, 1);
+//            gl.glVertex3f(vertex.x, vertex.y, vertex.z);
+//        }
+//        gl.glEnd();
         gl.glPopMatrix();
         gl.glFlush();
     }
@@ -185,8 +212,7 @@ public class HeadImportTest implements GLEventListener, MouseListener {
     }
 
     @Override
-    public void mouseClicked(MouseEvent arg0) {
-        draggx = draggy = 0;
+    public void mouseClicked(MouseEvent e) {
     }
 
     @Override
@@ -198,7 +224,9 @@ public class HeadImportTest implements GLEventListener, MouseListener {
     }
 
     @Override
-    public void mousePressed(MouseEvent arg0) {
+    public void mousePressed(MouseEvent e) {
+        draggx = e.getX();
+        draggy = e.getY();
     }
 
     @Override
@@ -211,13 +239,13 @@ public class HeadImportTest implements GLEventListener, MouseListener {
 
     @Override
     public void mouseDragged(MouseEvent e) {
-        System.out.println("Mouse is being dragged");
         float newx = e.getX();
         float newy = e.getY();
 
-        System.out.println("x = " + newx);
-        System.out.println("y = " + newy);
-
+//        System.out.println("x = " + newx);
+//        System.out.println("y = " + newy);
+        ugaox += newx - draggx;
+        ugaoy += newy - draggy;
         draggx = newx;
         draggy = newy;
     }
@@ -226,9 +254,89 @@ public class HeadImportTest implements GLEventListener, MouseListener {
     public void mouseWheelMoved(MouseEvent arg0) {
     }
 
-    public static void main(String args[]) {
+//    @Override
+    public void keyPressed(KeyEvent ke) {
+
+        if (ke.getKeyCode() == KeyEvent.VK_LEFT) {
+            if (electrodes_idx > 0) {
+                electrodes_idx--;
+            } else {
+                electrodes_idx = electrodes_values.size() - 1;
+            }
+        }
+        if (ke.getKeyCode() == KeyEvent.VK_RIGHT) {
+            if (electrodes_idx < electrodes_values.size() - 1) {
+                electrodes_idx++;
+            } else {
+                electrodes_idx = 0;
+            }
+        }
+    }
+
+    @Override
+    public void keyReleased(KeyEvent ke) {
+    }
+
+    private float[] findColor(OBJVertex vertex) {
+        float colors[] = new float[3];
+        float uk_angle = 0;
+        for (int i = 0; i < electrodes.size(); i++) {
+            OBJVertex electrode = electrodes.get(i);
+            float dot_prod = electrode.x * vertex.x + electrode.y * vertex.y + electrode.z * vertex.z;
+
+            double mag_el = Math.sqrt(electrode.x * electrode.x + electrode.y * electrode.y + electrode.z * electrode.z);
+            double mag_v = Math.sqrt(vertex.x * vertex.x + vertex.y * vertex.y + vertex.z * vertex.z);
+
+            double cos = dot_prod / (mag_el * mag_v);
+
+            float angle_rad = (float) Math.acos(cos);
+
+            float angle = (float) Math.toDegrees(angle_rad);
+
+            if (Math.abs(angle) < angle_max) {
+                uk_angle += 100 - angle;
+            }
+        }
+
+        for (int i = 0; i < electrodes.size(); i++) {
+            OBJVertex electrode = electrodes.get(i);
+            float dot_prod = electrode.x * vertex.x + electrode.y * vertex.y + electrode.z * vertex.z;
+
+            double mag_el = Math.sqrt(electrode.x * electrode.x + electrode.y * electrode.y + electrode.z * electrode.z);
+            double mag_v = Math.sqrt(vertex.x * vertex.x + vertex.y * vertex.y + vertex.z * vertex.z);
+
+            double cos = dot_prod / (mag_el * mag_v);
+
+            float angle_rad = (float) Math.acos(cos);
+
+            float angle = (float) Math.toDegrees(angle_rad);
+            //     System.out.println(angle);
+
+            if (Math.abs(angle) < angle_max) {
+                float hue = electrodes_values.get(electrodes_idx).get(i);
+                hue += 50;
+                hue /= 100;
+                hue *= 300;
+                hue /= 360;
+                hue = 1 - hue;
+                int rgb = Color.HSBtoRGB(hue, 1, 1);
+
+                float curr_colors[] = new float[3];
+                curr_colors[0] = (rgb >> 16) & 0xFF;
+                curr_colors[1] = (rgb >> 8) & 0xFF;
+                curr_colors[2] = rgb & 0xFF;
+
+                for (int j = 0; j < colors.length; j++) {
+                    colors[j] += (curr_colors[j] / 255f) * (angle / uk_angle);
+                }
+            }
+        }
+        return colors;
+    }
+
+    public static void main(String args[]) throws IOException {
         // Open a stream to your OBJ resource
-        try ( InputStream in = new FileInputStream("male_head.obj")) {
+        try (InputStream in = new FileInputStream("male_head.obj")) {
             // Create an OBJParser and parse the resource
             final IOBJParser parser = new OBJParser();
             model = parser.parse(in);
@@ -240,9 +348,86 @@ public class HeadImportTest implements GLEventListener, MouseListener {
                     model.getNormals().size(),
                     model.getTexCoords().size(),
                     model.getObjects().size()));
+
         } catch (IOException ex) {
-            Logger.getLogger(HeadImportTest.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(HeadImportTest.class
+                    .getName()).log(Level.SEVERE, null, ex);
         }
+
+        String electrodes_in[] = null;
+        try {
+            File voltages = new File("voltages.txt");
+            FileReader fr = new FileReader(voltages);
+            BufferedReader br = new BufferedReader(fr);
+            String line;
+            br.readLine();
+            int i = 0;
+
+            while ((line = br.readLine()) != null) {
+                if (i == 0) {
+                    electrodes_in = line.split(",");
+                    i++;
+                } else {
+                    String electrodes_val[];
+                    electrodes_val = line.split(",");
+                    ArrayList<Float> curr_values = new ArrayList<>();
+                    for (int j = 0; j < electrodes_val.length; j++) {
+                        if (j == 0) {
+                            curr_values.add(Float.parseFloat(electrodes_val[j]));
+                        } else {
+                            curr_values.add(Float.parseFloat(electrodes_val[j].substring(1)));
+                        }
+                    }
+                    electrodes_values.add(curr_values);
+                }
+
+            }
+
+        } catch (FileNotFoundException ex) {
+            Logger.getLogger(HeadImportTest.class
+                    .getName()).log(Level.SEVERE, null, ex);
+        }
+
+        try {
+            File voltages = new File("electrodes.txt");
+            FileReader fr = new FileReader(voltages);
+            BufferedReader br = new BufferedReader(fr);
+            String line;
+
+            while ((line = br.readLine()) != null) {
+                String[] split = line.split("\\s*( )+");
+
+                float fi = Float.parseFloat(split[2]);
+                float teta = Float.parseFloat(split[3]);
+                fi = (float) Math.toRadians(fi);
+                teta = (float) Math.toRadians(teta);
+                
+                float p = 1;
+                OBJVertex v = new OBJVertex();
+                v.x = (float) (Math.sin(fi) * Math.cos(teta)) * p;
+                v.y = (float) (Math.sin(fi) * Math.sin(teta)) * p;
+                v.z = (float) (Math.cos(fi)) * p;
+
+                int j;
+                for (j = 0; j < electrodes_in.length; j++) {
+                    if (j > 0 && split[1].equals(electrodes_in[j].substring(1))) {
+                        break;
+                    } else if (split[1].equals(electrodes_in[j])) {
+                        break;
+                    }
+                }
+                if (j < electrodes_in.length) {
+                    electrodes.add(v);
+
+                }
+
+            }
+        } catch (FileNotFoundException ex) {
+            Logger.getLogger(HeadImportTest.class
+                    .getName()).log(Level.SEVERE, null, ex);
+        }
+
+        System.out.println(electrodes.size() + " ");
         new HeadImportTest();
     }
 
