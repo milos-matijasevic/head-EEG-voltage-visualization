@@ -5,6 +5,7 @@
  */
 package headeegvoltagevisualization;
 
+import com.jogamp.common.nio.Buffers;
 import com.jogamp.graph.geom.Vertex;
 import com.jogamp.newt.event.KeyEvent;
 import com.jogamp.newt.event.KeyListener;
@@ -15,10 +16,12 @@ import com.jogamp.newt.event.WindowEvent;
 import com.jogamp.newt.opengl.GLWindow;
 import com.jogamp.opengl.GL;
 import com.jogamp.opengl.GL2;
+import com.jogamp.opengl.GL4;
 import com.jogamp.opengl.GLAutoDrawable;
 import com.jogamp.opengl.GLCapabilities;
 import com.jogamp.opengl.GLEventListener;
 import com.jogamp.opengl.GLProfile;
+import com.jogamp.opengl.math.Matrix4;
 import com.jogamp.opengl.util.FPSAnimator;
 import com.mokiat.data.front.parser.IOBJParser;
 import com.mokiat.data.front.parser.OBJDataReference;
@@ -42,6 +45,8 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.awt.Color;
+import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 
 /**
  *
@@ -63,15 +68,37 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
     private int electrodes_idx = 0;
     float angle_max = 70;
 
-    public HeadImportTest() {
-        GLProfile glp = GLProfile.getDefault();
+    private NeckFaceShader neckFaceShader;
+    public static Light mainLight = new Light(1, 1, 0);
 
+    private int vertexBufferID;
+    private int vertexArrayID;
+    private int vertexIndexBufferID;
+    private int colorBufferID;
+    private int num_faces;
+
+    private SimpleShader ss;
+
+    public Camera mainCamera = new StillCamera();
+    public CameraFrustum cf;
+
+    public HeadImportTest() {
         // Podesavanje OpenGL mogucnosti, koje zavise od profila
+        GLProfile glp = GLProfile.getMaxProgrammable(true);
+
+        System.out.println(glp.getGLImplBaseClassName());
+        System.out.println(glp.getImplName());
+        System.out.println(glp.getName());
+        System.out.println(glp.hasGLSL());
+
+        // Specifies a set of OpenGL capabilities, based on your profile.
         GLCapabilities caps = new GLCapabilities(glp);
 
         caps.setAlphaBits(8);
         caps.setDepthBits(24);
         caps.setDoubleBuffered(true);
+
+        neckFaceShader = new NeckFaceShader();
 
         // Pravljenje OpenGL prozora gde ce da se radi iscrtavanje, drawable objekat
         prozor = GLWindow.create(caps);
@@ -107,17 +134,91 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
 
     @Override
     public void init(GLAutoDrawable drawable) {
-        GL2 gl = drawable.getGL().getGL2();
+        GL4 gl = drawable.getGL().getGL4();
 
-        // Pozadinska boja se postavlja na belu
-        gl.glClearColor(1, 1, 1, 0);
+        gl.glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
-        // Koristi se model nijansiranog sencenja
-        gl.glShadeModel(GL2.GL_SMOOTH);
+        IntBuffer intBuffer = IntBuffer.allocate(1);
+        gl.glGenVertexArrays(1, intBuffer);
+        vertexArrayID = intBuffer.get(0);
 
-        // Ukljucuje se rezim provere dubine pre crtanja
-        gl.glEnable(GL2.GL_DEPTH_TEST);
+        gl.glBindVertexArray(vertexArrayID);
 
+        List<Float> vertexi = new ArrayList<>();
+        for (OBJVertex v : model.getVertices()) {
+            Matrix4 m;
+            vertexi.add(v.x * 0.02f);
+            vertexi.add(v.y * 0.02f);
+            vertexi.add((v.z - 5) * 0.02f);
+        }
+        float[] vertexData = new float[vertexi.size()];
+        for (int i = 0; i < vertexi.size(); i++) {
+            vertexData[i] = vertexi.get(i);
+        }
+
+        float[] colorData = new float[vertexData.length];
+
+        for (int i = 0; i < vertexData.length; i++) {
+            colorData[i] = 0.5f;
+        }
+
+        OBJObject obj = null;
+        for (OBJObject object : model.getObjects()) {
+            obj = object;
+        }
+        List<Integer> indeksi = new ArrayList<>();
+        for (OBJMesh mesh : obj.getMeshes()) {
+            for (OBJFace face : mesh.getFaces()) {
+                for (OBJDataReference reference : face.getReferences()) {
+                    indeksi.add(reference.vertexIndex);
+                }
+            }
+        }
+
+        int[] indices = new int[indeksi.size()];
+        for (int i = 0; i < indeksi.size(); i++) {
+            indices[i] = indeksi.get(i);
+        }
+        num_faces = indices.length;
+
+        FloatBuffer vertexBuffer = Buffers.newDirectFloatBuffer(vertexData, 0);
+        FloatBuffer vertexColorBuffer = Buffers.newDirectFloatBuffer(colorData, 0);
+        IntBuffer vertexIndexBuffer = Buffers.newDirectIntBuffer(indices, 0);
+
+        intBuffer.rewind();
+        gl.glGenBuffers(1, intBuffer);
+        vertexBufferID = intBuffer.get(0);
+        gl.glBindBuffer(GL4.GL_ARRAY_BUFFER, vertexBufferID);
+        gl.glBufferData(GL4.GL_ARRAY_BUFFER, vertexData.length * Float.BYTES, vertexBuffer, GL4.GL_STATIC_DRAW);
+        gl.glEnableVertexAttribArray(0);
+        gl.glVertexAttribPointer(0, 3, GL4.GL_FLOAT, false, 0, 0);
+
+        intBuffer.rewind();
+        gl.glGenBuffers(1, intBuffer);
+        colorBufferID = intBuffer.get(0);
+        gl.glBindBuffer(GL4.GL_ARRAY_BUFFER, colorBufferID);
+        gl.glBufferData(GL4.GL_ARRAY_BUFFER, colorData.length * Float.BYTES, vertexColorBuffer, GL4.GL_STATIC_DRAW);
+        gl.glEnableVertexAttribArray(1);
+        gl.glVertexAttribPointer(1, 3, GL4.GL_FLOAT, false, 0, 0);
+
+        intBuffer.rewind();
+        gl.glGenBuffers(1, intBuffer);
+        vertexIndexBufferID = intBuffer.get(0);
+        gl.glBindBuffer(GL4.GL_ELEMENT_ARRAY_BUFFER, vertexIndexBufferID);
+        gl.glBufferData(GL4.GL_ELEMENT_ARRAY_BUFFER, indices.length * Integer.BYTES, vertexIndexBuffer, GL4.GL_STATIC_DRAW);
+
+        ss = new SimpleShader("moj");
+        ss.buildShader(gl);
+
+        gl.glUseProgram(ss.getProgramObjectID());
+
+        int error = gl.glGetError();
+        System.out.println("Init: error = " + error);
+
+        /*Kamere*/
+        cf = new CameraFrustum(mainCamera);
+        cf.setShaderProgram(ss);
+        cf.init(gl);
     }
 
     @Override
@@ -125,73 +226,54 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
     }
 
     @Override
-    public void display(GLAutoDrawable drawable) {
-        GL2 gl = drawable.getGL().getGL2();
+    public void display(GLAutoDrawable drawable
+    ) {
+        GL4 gl = drawable.getGL().getGL4();
+
         // Obrisi bafer za boje i bafer za dubine
-        gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT);
+        gl.glClear(GL4.GL_COLOR_BUFFER_BIT | GL4.GL_DEPTH_BUFFER_BIT);
 
-        gl.glMatrixMode(GL2.GL_MODELVIEW);
+        //gl.glDrawArrays(GL4.GL_TRIANGLES, 0, 3);
+        //ee
+        gl.glBindVertexArray(vertexArrayID);
+        gl.glUseProgram(ss.getProgramObjectID());
+        gl.glDrawElements(GL4.GL_TRIANGLES, num_faces, GL4.GL_UNSIGNED_INT, 0);
+        gl.glBindVertexArray(0);
 
-        gl.glLoadIdentity();
-
-        gl.glPushMatrix();
-
-        gl.glTranslatef(0, 0, -50);
-        gl.glRotatef(ugaoy, 1, 0, 0);
-        gl.glRotatef(ugaox, 0, 1, 0);
-
-        gl.glBegin(GL2.GL_TRIANGLES);
-        int c = 0;
-        for (OBJObject object : model.getObjects()) {
-            for (OBJMesh mesh : object.getMeshes()) {
-                for (OBJFace face : mesh.getFaces()) {
-                    for (OBJDataReference reference : face.getReferences()) {
-                        final OBJVertex vertex = model.getVertex(reference);
-                        if (vertex.y > 5) {
-                            float colors[] = findColor(vertex);
-                            switch (c) {
-                                case 0:
-                                    gl.glColor3f(1, 0, 0);
-                                    break;
-                                case 1:
-                                    gl.glColor3f(0, 1, 0);
-                                    break;
-                                case 2:
-                                    gl.glColor3f(0, 0, 1);
-                                    break;
-                            }
-                            c = (c + 1) % 3;
-                            gl.glColor3f(colors[0], colors[1], colors[2]);
-                        } else {
-                            gl.glColor3f(0.945f, 0.761f, 0.49f);
-                        }
-                        gl.glVertex3f(vertex.x, vertex.y, vertex.z);
-                    }
-                }
-            }
-        }
-        gl.glEnd();
-
-//        gl.glBegin(GL2.GL_POINTS);
-//        for (OBJVertex vertex : electrodes) {
-//            gl.glColor3f(0, 0, 1);
-//            gl.glVertex3f(vertex.x, vertex.y, vertex.z);
+//        int c = 0;
+//        for (OBJObject object : model.getObjects()) {
+//            for (OBJMesh mesh : object.getMeshes()) {
+//                for (OBJFace face : mesh.getFaces()) {
+//                    for (OBJDataReference reference : face.getReferences()) {
+//                        final OBJVertex vertex = model.getVertex(reference);
+//                        if (vertex.y > 5) {
+//                            float colors[] = findColor(vertex);
+//                            switch (c) {
+//                                case 0:
+//                                    gl.glColor3f(1, 0, 0);
+//                                    break;
+//                                case 1:
+//                                    gl.glColor3f(0, 1, 0);
+//                                    break;
+//                                case 2:
+//                                    gl.glColor3f(0, 0, 1);
+//                                    break;
+//                            }
+//                            c = (c + 1) % 3;
+//                            gl.glColor3f(colors[0], colors[1], colors[2]);
+//                        } else {
+//                            gl.glColor3f(0.945f, 0.761f, 0.49f);
+//                        }
+//                        gl.glVertex3f(vertex.x, vertex.y, vertex.z);
+//                    }
+//                }
+//            }
 //        }
-//        gl.glEnd();
-        gl.glPopMatrix();
-        gl.glFlush();
     }
 
     @Override
-    public void reshape(GLAutoDrawable drawable, int x, int y, int width, int height) {
-        GL2 gl = drawable.getGL().getGL2();
-
-        // Postavljanje viewport-a
-        gl.glViewport(0, 0, width, height);
-        sirinaProzora = width;
-        visinaProzora = height;
-
-        postaviProjekciju(drawable);
+    public void reshape(GLAutoDrawable drawable, int x, int y, int width, int height
+    ) {
     }
 
     private void postaviProjekciju(GLAutoDrawable drawable) {
@@ -401,7 +483,7 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
                 float teta = Float.parseFloat(split[3]);
                 fi = (float) Math.toRadians(fi);
                 teta = (float) Math.toRadians(teta);
-                
+
                 float p = 1;
                 OBJVertex v = new OBJVertex();
                 v.x = (float) (Math.sin(fi) * Math.cos(teta)) * p;
