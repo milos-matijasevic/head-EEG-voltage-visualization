@@ -11,4 +11,5 @@ void main()
 	vec3 lightVec = normalize(lightPosInCameraSpace - vertexPosInCameraSpace);
 	float lambert = max(dot(normal, lightVec), 0);
 	outColor = vec4(lambert*interpolatedVertexColor, 1.0);
+
 }

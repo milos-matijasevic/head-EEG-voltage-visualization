@@ -10,16 +10,16 @@ out vec3 vertexPosInCameraSpace;
 
 uniform mat4 MVPTransform;
 uniform mat4 MVTransform;
-uniform mat3 NormalTransform;
+uniform mat4 Rotate;
+uniform mat4 NormalTransform;
 uniform vec3 LightPosition;
 
 void main()
 {
-	interpolatedNormal = NormalTransform * vertexNormal;
+	interpolatedNormal = (NormalTransform * Rotate * vec4(vertexNormal, 0.0)).xyz;
 	lightPosInCameraSpace = (MVTransform * vec4(LightPosition, 1.0)).xyz;
 	vertexPosInCameraSpace = (MVTransform * vec4(vertexPosition, 1.0)).xyz;
-	
 	interpolatedVertexColor = vertexColor;
 	
-	gl_Position = MVPTransform * vec4(vertexPosition, 1.0);
+	gl_Position = MVPTransform * Rotate * vec4(vertexPosition, 1.0);
 }

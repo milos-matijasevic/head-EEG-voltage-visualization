@@ -3,7 +3,10 @@
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
-            <file>file:/D:/faks/milos/5%20god%201%20sem/rg2/dom1/head-EEG-voltage-visualization/HeadEEGVoltageVisualization/src/headeegvoltagevisualization/CameraFrustum.java</file>
+            <file>file:/D:/faks/milos/5%20god%201%20sem/rg2/dom1/head-EEG-voltage-visualization/HeadEEGVoltageVisualization/src/headeegvoltagevisualization/SimpleShader.java</file>
+            <file>file:/D:/faks/milos/5%20god%201%20sem/rg2/dom1/head-EEG-voltage-visualization/HeadEEGVoltageVisualization/src/headeegvoltagevisualization/NeckFaceShader.java</file>
+            <file>file:/D:/faks/milos/5%20god%201%20sem/rg2/dom1/head-EEG-voltage-visualization/HeadEEGVoltageVisualization/src/headeegvoltagevisualization/Light.java</file>
+            <file>file:/D:/faks/milos/5%20god%201%20sem/rg2/dom1/head-EEG-voltage-visualization/HeadEEGVoltageVisualization/src/headeegvoltagevisualization/StillCamera.java</file>
             <file>file:/D:/faks/milos/5%20god%201%20sem/rg2/dom1/head-EEG-voltage-visualization/HeadEEGVoltageVisualization/src/headeegvoltagevisualization/HeadImportTest.java</file>
         </group>
     </open-files>

@@ -5,6 +5,7 @@
  */
 package headeegvoltagevisualization;
 
+import com.jogamp.opengl.GL4;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ public class NeckFaceShader extends ShaderProgramWrapper {
         uniforms = new ArrayList<>();
         uniforms.add("MVPTransform");
         uniforms.add("MVTransform");
+        uniforms.add("Rotate");
         uniforms.add("NormalTransform");
         uniforms.add("LightPosition");       
     }

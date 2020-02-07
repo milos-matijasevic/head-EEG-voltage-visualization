@@ -35,7 +35,8 @@ public abstract class ShaderProgramWrapper
             shaderProgram.addShader(geometryShader);
         
         shaderProgram.build(gl, uniforms);
-        System.out.println(shaderProgram.getLog());       
+        System.out.println(shaderProgram.getLog()); 
+        System.out.println("BUILDED");
     }
     
     public int getProgramObjectID()

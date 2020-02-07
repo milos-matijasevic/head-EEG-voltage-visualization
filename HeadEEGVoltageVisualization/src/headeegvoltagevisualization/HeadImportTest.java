@@ -28,6 +28,7 @@ import com.mokiat.data.front.parser.OBJDataReference;
 import com.mokiat.data.front.parser.OBJFace;
 import com.mokiat.data.front.parser.OBJMesh;
 import com.mokiat.data.front.parser.OBJModel;
+import com.mokiat.data.front.parser.OBJNormal;
 import com.mokiat.data.front.parser.OBJObject;
 import com.mokiat.data.front.parser.OBJParser;
 import com.mokiat.data.front.parser.OBJVertex;
@@ -47,6 +48,10 @@ import java.util.logging.Logger;
 import java.awt.Color;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.util.HashMap;
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 /**
  *
@@ -55,8 +60,8 @@ import java.nio.IntBuffer;
 public class HeadImportTest implements GLEventListener, MouseListener, KeyListener {
 
     private GLWindow prozor; // prozor, drawable objekat
-    private static String naslov = "Kocke"; // naslov prozora
-    private int sirinaProzora = 600, visinaProzora = 500; // sirina i visina prozora
+    private static String naslov = "Head EEG"; // naslov prozora
+    private int sirinaProzora = 700, visinaProzora = 600; // sirina i visina prozora
     private static final int FPS = 60; // ucestanost kojom ce objekat animatora da poziva display() metod (videti nize)
     private FPSAnimator animator;
     private static OBJModel model;
@@ -69,18 +74,24 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
     float angle_max = 70;
 
     private NeckFaceShader neckFaceShader;
-    public static Light mainLight = new Light(1, 1, 0);
+    public static Light mainLight = new Light(0, -1000, 5000);
 
     private int vertexBufferID;
     private int vertexArrayID;
     private int vertexIndexBufferID;
     private int colorBufferID;
+    private int normalBufferID;
     private int num_faces;
 
-    private SimpleShader ss;
+    //private SimpleShader ss;
+    public StillCamera mainCamera = new StillCamera();
 
-    public Camera mainCamera = new StillCamera();
-    public CameraFrustum cf;
+    private Matrix4f transformHead = new Matrix4f();
+    private float[] transformArray = new float[16];
+
+    private Matrix3f normalTransform = new Matrix3f();
+    private float[] normalTransformArray = new float[16];
+    private float[] lightPosArray = new float[3];
 
     public HeadImportTest() {
         // Podesavanje OpenGL mogucnosti, koje zavise od profila
@@ -129,6 +140,7 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
         prozor.setSize(sirinaProzora, visinaProzora);
         prozor.setTitle(naslov);
         prozor.setVisible(true);
+        prozor.setResizable(false);
         animator.start();
     }
 
@@ -136,21 +148,74 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
     public void init(GLAutoDrawable drawable) {
         GL4 gl = drawable.getGL().getGL4();
 
-        gl.glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        neckFaceShader = new NeckFaceShader();
+        neckFaceShader.buildShader(gl);
 
-        IntBuffer intBuffer = IntBuffer.allocate(1);
-        gl.glGenVertexArrays(1, intBuffer);
-        vertexArrayID = intBuffer.get(0);
-
-        gl.glBindVertexArray(vertexArrayID);
+        OBJObject obj = null;
+        for (OBJObject object : model.getObjects()) {
+            obj = object;
+        }
 
         List<Float> vertexi = new ArrayList<>();
-        for (OBJVertex v : model.getVertices()) {
-            Matrix4 m;
-            vertexi.add(v.x * 0.02f);
-            vertexi.add(v.y * 0.02f);
-            vertexi.add((v.z - 5) * 0.02f);
+        List<Integer> indeksi = new ArrayList<>();
+        List<Float> normals = new ArrayList<>();
+
+//        for (OBJVertex v : model.getVertices()) {
+//            vertexi.add(v.x);
+//            vertexi.add(v.y);
+//            vertexi.add(v.z);
+//        }
+//        for (OBJMesh mesh : obj.getMeshes()) {
+//            for (OBJFace face : mesh.getFaces()) {
+//                for (OBJDataReference reference : face.getReferences()) {
+//                    indeksi.add(reference.vertexIndex);
+//                }
+//            }
+//        }
+//        for (OBJMesh mesh : obj.getMeshes()) {
+//            for (OBJFace face : mesh.getFaces()) {
+//                for (OBJDataReference reference : face.getReferences()) {
+//                    normalData[reference.normalIndex] = model.getNormal(reference).x;
+//                    normalData[reference.normalIndex + 1] = model.getNormal(reference).y;
+//                    normalData[reference.normalIndex + 2] = model.getNormal(reference).z;
+//                }
+//            }
+//        }
+
+        /* Map normals and vertexes*/
+        HashMap<String, Integer> vertexNormalToIndex = new HashMap<>();
+
+        int idx = 0;
+        for (OBJMesh mesh : obj.getMeshes()) {
+            for (OBJFace face : mesh.getFaces()) {
+                for (OBJDataReference reference : face.getReferences()) {
+                    int vertexIdx = reference.vertexIndex;
+                    int normalIdx = reference.normalIndex;
+                    String key = vertexIdx + "," + normalIdx;
+
+                    int faceIdx;
+                    if (vertexNormalToIndex.containsKey(key)) {
+                        faceIdx = vertexNormalToIndex.get(key);
+                    } else {
+                        vertexi.add(model.getVertices().get(vertexIdx).x);
+                        vertexi.add(model.getVertices().get(vertexIdx).y);
+                        vertexi.add(model.getVertices().get(vertexIdx).z);
+
+                        normals.add(model.getNormals().get(normalIdx).x);
+                        normals.add(model.getNormals().get(normalIdx).y);
+                        normals.add(model.getNormals().get(normalIdx).z);
+
+                        faceIdx = idx;
+                        vertexNormalToIndex.put(key, faceIdx);
+                        idx++;
+                    }
+
+                    indeksi.add(faceIdx);
+
+                }
+            }
         }
+
         float[] vertexData = new float[vertexi.size()];
         for (int i = 0; i < vertexi.size(); i++) {
             vertexData[i] = vertexi.get(i);
@@ -158,21 +223,9 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
 
         float[] colorData = new float[vertexData.length];
 
-        for (int i = 0; i < vertexData.length; i++) {
-            colorData[i] = 0.5f;
-        }
-
-        OBJObject obj = null;
-        for (OBJObject object : model.getObjects()) {
-            obj = object;
-        }
-        List<Integer> indeksi = new ArrayList<>();
-        for (OBJMesh mesh : obj.getMeshes()) {
-            for (OBJFace face : mesh.getFaces()) {
-                for (OBJDataReference reference : face.getReferences()) {
-                    indeksi.add(reference.vertexIndex);
-                }
-            }
+        float[] normalData = new float[vertexData.length];
+        for (int i = 0; i < normals.size(); i++) {
+            normalData[i] = normals.get(i);
         }
 
         int[] indices = new int[indeksi.size()];
@@ -181,8 +234,33 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
         }
         num_faces = indices.length;
 
+        // Fake colors
+        for (int i = 0; i < vertexData.length; i += 3) {
+            if (vertexData[i + 1] > 7) {
+                if (i % 9 == 0) {
+                    colorData[i + 2] = 1f;
+                } else if (i % 6 == 0) {
+                    colorData[i + 1] = 1f;
+                } else {
+                    colorData[i] = 1f;
+                }
+            } else {
+                colorData[i] = 224 / 255f;
+                colorData[i + 1] = 172 / 255f;
+                colorData[i + 2] = 105 / 255f;
+            }
+
+        }
+
+        IntBuffer intBuffer = IntBuffer.allocate(1);
+        gl.glGenVertexArrays(1, intBuffer);
+        vertexArrayID = intBuffer.get(0);
+
+        gl.glBindVertexArray(vertexArrayID);
+
         FloatBuffer vertexBuffer = Buffers.newDirectFloatBuffer(vertexData, 0);
         FloatBuffer vertexColorBuffer = Buffers.newDirectFloatBuffer(colorData, 0);
+        FloatBuffer vertexNormalBuffer = Buffers.newDirectFloatBuffer(normalData, 0);
         IntBuffer vertexIndexBuffer = Buffers.newDirectIntBuffer(indices, 0);
 
         intBuffer.rewind();
@@ -203,94 +281,98 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
 
         intBuffer.rewind();
         gl.glGenBuffers(1, intBuffer);
+        normalBufferID = intBuffer.get(0);
+        gl.glBindBuffer(GL4.GL_ARRAY_BUFFER, normalBufferID);
+        gl.glBufferData(GL4.GL_ARRAY_BUFFER, normalData.length * Float.BYTES, vertexNormalBuffer, GL4.GL_STATIC_DRAW);
+        gl.glEnableVertexAttribArray(2);
+        gl.glVertexAttribPointer(2, 3, GL4.GL_FLOAT, false, 0, 0);
+
+        intBuffer.rewind();
+        gl.glGenBuffers(1, intBuffer);
         vertexIndexBufferID = intBuffer.get(0);
         gl.glBindBuffer(GL4.GL_ELEMENT_ARRAY_BUFFER, vertexIndexBufferID);
         gl.glBufferData(GL4.GL_ELEMENT_ARRAY_BUFFER, indices.length * Integer.BYTES, vertexIndexBuffer, GL4.GL_STATIC_DRAW);
 
-        ss = new SimpleShader("moj");
-        ss.buildShader(gl);
-
-        gl.glUseProgram(ss.getProgramObjectID());
-
+        gl.glEnable(GL4.GL_DEPTH_TEST);
         int error = gl.glGetError();
+
         System.out.println("Init: error = " + error);
 
-        /*Kamere*/
-        cf = new CameraFrustum(mainCamera);
-        cf.setShaderProgram(ss);
-        cf.init(gl);
+    }
+
+    public void destroy(GL4 gl) {
+        IntBuffer buffer = Buffers.newDirectIntBuffer(3);
+        buffer.put(vertexBufferID);
+        buffer.put(colorBufferID);
+        buffer.put(normalBufferID);
+        buffer.put(vertexIndexBufferID);
+        buffer.rewind();
+        gl.glDeleteBuffers(4, buffer);
+
+        buffer.rewind();
+        buffer.put(vertexArrayID);
+        buffer.rewind();
+        gl.glDeleteVertexArrays(1, buffer);
     }
 
     @Override
     public void dispose(GLAutoDrawable drawable) {
     }
 
+    int k = 0;
+
     @Override
     public void display(GLAutoDrawable drawable
     ) {
+        k++;
+        if (k % 100 == 0) {
+            //   System.out.println(mainCamera.GetViewProjection().toString());
+        }
+
         GL4 gl = drawable.getGL().getGL4();
 
         // Obrisi bafer za boje i bafer za dubine
-        gl.glClear(GL4.GL_COLOR_BUFFER_BIT | GL4.GL_DEPTH_BUFFER_BIT);
+        gl.glClearColor(0, 0, 0, 0.0f);
 
-        //gl.glDrawArrays(GL4.GL_TRIANGLES, 0, 3);
-        //ee
+        gl.glClear(GL4.GL_COLOR_BUFFER_BIT | GL4.GL_STENCIL_BUFFER_BIT | GL4.GL_DEPTH_BUFFER_BIT);
+
+        gl.glUseProgram(neckFaceShader.getProgramObjectID());
+
+        int transformLoc = neckFaceShader.GetShaderProgram().getUniformLocation("MVPTransform");
+        mainCamera.GetViewProjection().get(transformArray);
+        gl.glUniformMatrix4fv(transformLoc, 1, false, transformArray, 0);
+
+        int rotateLoc = neckFaceShader.GetShaderProgram().getUniformLocation("Rotate");
+        transformHead.get(transformArray);
+        gl.glUniformMatrix4fv(rotateLoc, 1, false, transformArray, 0);
+
+        int MVtransformLoc = neckFaceShader.GetShaderProgram().getUniformLocation("MVTransform");
+        mainCamera.GetView().get(transformArray);
+        gl.glUniformMatrix4fv(MVtransformLoc, 1, false, transformArray, 0);
+
+        int normalTransformLoc = neckFaceShader.GetShaderProgram().getUniformLocation("NormalTransform");
+        Matrix4f MVtransform = mainCamera.GetView();
+        MVtransform.get3x3(normalTransform);
+        normalTransform = normalTransform.invert().transpose();
+        MVtransform = new Matrix4f(normalTransform);
+        MVtransform.get(normalTransformArray);
+        gl.glUniformMatrix4fv(normalTransformLoc, 1, false, normalTransformArray, 0);
+
+        int LightPositionLoc = neckFaceShader.GetShaderProgram().getUniformLocation("LightPosition");
+        lightPosArray[0] = mainLight.getPosition().x;
+        lightPosArray[1] = mainLight.getPosition().y;
+        lightPosArray[2] = mainLight.getPosition().z;
+        gl.glUniform3fv(LightPositionLoc, 1, lightPosArray, 0);
+
         gl.glBindVertexArray(vertexArrayID);
-        gl.glUseProgram(ss.getProgramObjectID());
+        gl.glUseProgram(neckFaceShader.getProgramObjectID());
         gl.glDrawElements(GL4.GL_TRIANGLES, num_faces, GL4.GL_UNSIGNED_INT, 0);
         gl.glBindVertexArray(0);
 
-//        int c = 0;
-//        for (OBJObject object : model.getObjects()) {
-//            for (OBJMesh mesh : object.getMeshes()) {
-//                for (OBJFace face : mesh.getFaces()) {
-//                    for (OBJDataReference reference : face.getReferences()) {
-//                        final OBJVertex vertex = model.getVertex(reference);
-//                        if (vertex.y > 5) {
-//                            float colors[] = findColor(vertex);
-//                            switch (c) {
-//                                case 0:
-//                                    gl.glColor3f(1, 0, 0);
-//                                    break;
-//                                case 1:
-//                                    gl.glColor3f(0, 1, 0);
-//                                    break;
-//                                case 2:
-//                                    gl.glColor3f(0, 0, 1);
-//                                    break;
-//                            }
-//                            c = (c + 1) % 3;
-//                            gl.glColor3f(colors[0], colors[1], colors[2]);
-//                        } else {
-//                            gl.glColor3f(0.945f, 0.761f, 0.49f);
-//                        }
-//                        gl.glVertex3f(vertex.x, vertex.y, vertex.z);
-//                    }
-//                }
-//            }
-//        }
     }
 
     @Override
-    public void reshape(GLAutoDrawable drawable, int x, int y, int width, int height
-    ) {
-    }
-
-    private void postaviProjekciju(GLAutoDrawable drawable) {
-        // Dohvatanje OpenGL konteksta
-        GL2 gl = drawable.getGL().getGL2();
-
-        // Biranje matrice PROJEKCIJE kao aktivne matrice za buducu manipulaciju
-        gl.glMatrixMode(GL2.GL_PROJECTION);
-
-        // Postavljanje na jedinicnu matricu
-        gl.glLoadIdentity();
-
-        gl.glFrustum(-1, 1, -1, 1, 1, 300);
-        //  gl.glOrtho(-1.5, 1.5, -1.5, 1.5, 0, 6);
-
-        // Vracanje podrazumevane matrice
-        gl.glMatrixMode(GL2.GL_MODELVIEW);
+    public void reshape(GLAutoDrawable drawable, int x, int y, int width, int height) {
     }
 
     @Override
@@ -324,16 +406,24 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
         float newx = e.getX();
         float newy = e.getY();
 
-//        System.out.println("x = " + newx);
-//        System.out.println("y = " + newy);
+        //      mainCamera.moveZ(newx - draggx);
         ugaox += newx - draggx;
         ugaoy += newy - draggy;
         draggx = newx;
         draggy = newy;
+
+        transformHead = new Matrix4f().rotate((float) Math.toRadians(ugaoy), 1, 0, 0)
+                .rotate((float) Math.toRadians(ugaox), 0, 1, 0);
     }
 
     @Override
-    public void mouseWheelMoved(MouseEvent arg0) {
+    public void mouseWheelMoved(MouseEvent e) {
+        float r = e.getRotation()[1];
+        if (r == 0) {
+            return;
+        }
+        mainCamera.moveZ(-r);
+
     }
 
 //    @Override

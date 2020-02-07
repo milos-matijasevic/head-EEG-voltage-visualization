@@ -4,24 +4,39 @@
  * and open the template in the editor.
  */
 package headeegvoltagevisualization;
+
+import org.joml.Vector3f;
+
 /**
  *
- * @author 
+ * @author djordje
  */
-public class Light extends SceneObject
-{
-    public Light() {}
-    
-    public Light(float x, float y, float z)
-    {
+public class Light {
+
+    private Vector3f position = new Vector3f();
+
+    public Light() {
+    }
+
+    public Vector3f getPosition() {
+        return position;
+    }
+
+    public void setPosition(Vector3f pos) {
+        position.set(pos);
+    }
+
+    public void setPosition(float x, float y, float z) {
+        position.x = x;
+        position.y = y;
+        position.z = z;
+    }
+
+    public Light(float x, float y, float z) {
         position.set(x, y, z);
     }
-    
-    @Override
-    public void update() 
-    {
-       double angle = (System.currentTimeMillis() % 5000)*360.0/5000.0;
-       position.x = (float)(5 * Math.cos( Math.toRadians(angle) ));
-       position.z = (float)(5 * Math.sin( Math.toRadians(angle) ));    
-    }   
+
+    public void update() {
+        
+    }
 }

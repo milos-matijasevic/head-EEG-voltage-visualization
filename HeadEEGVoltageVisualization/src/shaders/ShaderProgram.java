@@ -150,7 +150,8 @@ public class ShaderProgram
         int infoLogLen = params[0];
         ByteBuffer programLog = ByteBuffer.allocate(infoLogLen);
         gl.glGetProgramInfoLog(programID, infoLogLen, null, programLog);
-        buildLog.append(programLog.array());       
+        buildLog.append(programLog.array()); 
+        
     }
     
     public void delete(GL4 gl)
