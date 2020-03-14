@@ -7,6 +7,7 @@ out vec3 interpolatedVertexColor;
 out vec3 interpolatedNormal;
 out vec3 lightPosInCameraSpace;
 out vec3 vertexPosInCameraSpace;
+out vec3 vertexPos;
 
 uniform mat4 MVPTransform;
 uniform mat4 MVTransform;
@@ -20,6 +21,7 @@ void main()
 	lightPosInCameraSpace = (MVTransform * vec4(LightPosition, 1.0)).xyz;
 	vertexPosInCameraSpace = (MVTransform * vec4(vertexPosition, 1.0)).xyz;
 	interpolatedVertexColor = vertexColor;
+	vertexPos = vertexPosition;
 	
 	gl_Position = MVPTransform * Rotate * vec4(vertexPosition, 1.0);
 }

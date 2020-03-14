@@ -44,7 +44,11 @@ public class NeckFaceShader extends ShaderProgramWrapper {
         uniforms.add("MVTransform");
         uniforms.add("Rotate");
         uniforms.add("NormalTransform");
-        uniforms.add("LightPosition");       
+        uniforms.add("LightPosition");   
+        uniforms.add("ElectrodesNumber");
+        uniforms.add("ElectrodesValues");
+        uniforms.add("Electrodes");
+        uniforms.add("MaxAngle");
     }
     
 }

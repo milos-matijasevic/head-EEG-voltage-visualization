@@ -21,7 +21,6 @@ import com.jogamp.opengl.GLAutoDrawable;
 import com.jogamp.opengl.GLCapabilities;
 import com.jogamp.opengl.GLEventListener;
 import com.jogamp.opengl.GLProfile;
-import com.jogamp.opengl.math.Matrix4;
 import com.jogamp.opengl.util.FPSAnimator;
 import com.mokiat.data.front.parser.IOBJParser;
 import com.mokiat.data.front.parser.OBJDataReference;
@@ -68,12 +67,14 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
 
     private float draggx, draggy;
     private float ugaox, ugaoy;
-    private static List<OBJVertex> electrodes = new ArrayList<>();
+    private static List<Float> electrodes = new ArrayList<>();
     private static List<List<Float>> electrodes_values = new ArrayList<>();
     private int electrodes_idx = 0;
+    private int electrodes_base = 0;
     float angle_max = 70;
 
     private NeckFaceShader neckFaceShader;
+    private SimpleShader simpleShader;
     public static Light mainLight = new Light(0, -1000, 5000);
 
     private int vertexBufferID;
@@ -92,6 +93,8 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
     private Matrix3f normalTransform = new Matrix3f();
     private float[] normalTransformArray = new float[16];
     private float[] lightPosArray = new float[3];
+    private float maxAngle = 10f;
+    private static int frequency;
 
     public HeadImportTest() {
         // Podesavanje OpenGL mogucnosti, koje zavise od profila
@@ -150,6 +153,9 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
 
         neckFaceShader = new NeckFaceShader();
         neckFaceShader.buildShader(gl);
+        simpleShader = new SimpleShader("ss");
+        simpleShader.buildShader(gl);
+        
 
         OBJObject obj = null;
         for (OBJObject object : model.getObjects()) {
@@ -159,28 +165,6 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
         List<Float> vertexi = new ArrayList<>();
         List<Integer> indeksi = new ArrayList<>();
         List<Float> normals = new ArrayList<>();
-
-//        for (OBJVertex v : model.getVertices()) {
-//            vertexi.add(v.x);
-//            vertexi.add(v.y);
-//            vertexi.add(v.z);
-//        }
-//        for (OBJMesh mesh : obj.getMeshes()) {
-//            for (OBJFace face : mesh.getFaces()) {
-//                for (OBJDataReference reference : face.getReferences()) {
-//                    indeksi.add(reference.vertexIndex);
-//                }
-//            }
-//        }
-//        for (OBJMesh mesh : obj.getMeshes()) {
-//            for (OBJFace face : mesh.getFaces()) {
-//                for (OBJDataReference reference : face.getReferences()) {
-//                    normalData[reference.normalIndex] = model.getNormal(reference).x;
-//                    normalData[reference.normalIndex + 1] = model.getNormal(reference).y;
-//                    normalData[reference.normalIndex + 2] = model.getNormal(reference).z;
-//                }
-//            }
-//        }
 
         /* Map normals and vertexes*/
         HashMap<String, Integer> vertexNormalToIndex = new HashMap<>();
@@ -209,9 +193,7 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
                         vertexNormalToIndex.put(key, faceIdx);
                         idx++;
                     }
-
                     indeksi.add(faceIdx);
-
                 }
             }
         }
@@ -234,22 +216,11 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
         }
         num_faces = indices.length;
 
-        // Fake colors
+        // Skin color
         for (int i = 0; i < vertexData.length; i += 3) {
-            if (vertexData[i + 1] > 7) {
-                if (i % 9 == 0) {
-                    colorData[i + 2] = 1f;
-                } else if (i % 6 == 0) {
-                    colorData[i + 1] = 1f;
-                } else {
-                    colorData[i] = 1f;
-                }
-            } else {
-                colorData[i] = 224 / 255f;
-                colorData[i + 1] = 172 / 255f;
-                colorData[i + 2] = 105 / 255f;
-            }
-
+            colorData[i] = 224 / 255f;
+            colorData[i + 1] = 172 / 255f;
+            colorData[i + 2] = 105 / 255f;
         }
 
         IntBuffer intBuffer = IntBuffer.allocate(1);
@@ -297,7 +268,6 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
         int error = gl.glGetError();
 
         System.out.println("Init: error = " + error);
-
     }
 
     public void destroy(GL4 gl) {
@@ -319,16 +289,9 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
     public void dispose(GLAutoDrawable drawable) {
     }
 
-    int k = 0;
-
     @Override
-    public void display(GLAutoDrawable drawable
-    ) {
-        k++;
-        if (k % 100 == 0) {
-            //   System.out.println(mainCamera.GetViewProjection().toString());
-        }
-
+    public void display(GLAutoDrawable drawable) {
+        
         GL4 gl = drawable.getGL().getGL4();
 
         // Obrisi bafer za boje i bafer za dubine
@@ -364,11 +327,50 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
         lightPosArray[2] = mainLight.getPosition().z;
         gl.glUniform3fv(LightPositionLoc, 1, lightPosArray, 0);
 
+        int electrodesValuesArrayLoc = neckFaceShader.GetShaderProgram().getUniformLocation("ElectrodesValues");
+        float[] electrodesValuesArray = new float[electrodes_values.get(electrodes_base + electrodes_idx).size()];
+        int index = 0;
+        for (final Float value : electrodes_values.get(electrodes_base + electrodes_idx)) {
+            electrodesValuesArray[index++] = value;
+        }
+        gl.glUniform1fv(electrodesValuesArrayLoc, electrodesValuesArray.length, electrodesValuesArray, 0);
+
+        int electrodesNumberLoc = neckFaceShader.GetShaderProgram().getUniformLocation("ElectrodesNumber");
+        gl.glUniform1i(electrodesNumberLoc, electrodesValuesArray.length);
+
+        int electrodesArrayLoc = neckFaceShader.GetShaderProgram().getUniformLocation("Electrodes");
+        float[] electrodesArray = new float[electrodes.size()];
+        index = 0;
+        for (final Float value : electrodes) {
+            electrodesArray[index++] = value;
+        }
+        gl.glUniform3fv(electrodesArrayLoc, electrodesArray.length / 3, electrodesArray, 0);
+
+        int maxAngleLoc = neckFaceShader.GetShaderProgram().getUniformLocation("MaxAngle");
+        gl.glUniform1f(maxAngleLoc, maxAngle);
+
         gl.glBindVertexArray(vertexArrayID);
         gl.glUseProgram(neckFaceShader.getProgramObjectID());
         gl.glDrawElements(GL4.GL_TRIANGLES, num_faces, GL4.GL_UNSIGNED_INT, 0);
         gl.glBindVertexArray(0);
 
+        
+        gl.glUseProgram(simpleShader.getProgramObjectID());
+        
+        
+        GL2 gl2 = drawable.getGL().getGL2();
+        gl2.glColor3f(1f,1f,1f);
+        gl2.glBegin(GL2.GL_POLYGON);
+        gl2.glVertex2f(-0.90f, -0.90f);
+        gl2.glVertex2f(-0.80f, -0.90f);
+        gl2.glVertex2f(-0.80f, -0.20f);
+        gl2.glVertex2f(-0.90f, -0.20f);
+        gl2.glEnd();
+        
+        electrodes_idx = (electrodes_idx + 1) % frequency;
+        if (electrodes_base + electrodes_idx >= electrodes_values.size()){
+            electrodes_idx = 0;
+        }
     }
 
     @Override
@@ -422,88 +424,38 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
         if (r == 0) {
             return;
         }
-        mainCamera.moveZ(-r);
-
+        mainCamera.moveZ(-r * 3);
     }
 
 //    @Override
     public void keyPressed(KeyEvent ke) {
 
         if (ke.getKeyCode() == KeyEvent.VK_LEFT) {
-            if (electrodes_idx > 0) {
-                electrodes_idx--;
-            } else {
-                electrodes_idx = electrodes_values.size() - 1;
+            if (electrodes_base - frequency >= 0) {
+                electrodes_base -= frequency;
+                electrodes_idx = 0;
             }
         }
         if (ke.getKeyCode() == KeyEvent.VK_RIGHT) {
-            if (electrodes_idx < electrodes_values.size() - 1) {
-                electrodes_idx++;
-            } else {
+            if (electrodes_base + 2*frequency < electrodes_values.size()) {
+                electrodes_base += frequency;
                 electrodes_idx = 0;
+            } 
+        }
+        if (ke.getKeyCode() == KeyEvent.VK_UP) {
+            if (maxAngle < 90) {
+                maxAngle++;
+            }
+        }
+        if (ke.getKeyCode() == KeyEvent.VK_DOWN) {
+            if (maxAngle > 2) {
+                maxAngle--;
             }
         }
     }
 
     @Override
     public void keyReleased(KeyEvent ke) {
-    }
-
-    private float[] findColor(OBJVertex vertex) {
-        float colors[] = new float[3];
-        float uk_angle = 0;
-        for (int i = 0; i < electrodes.size(); i++) {
-            OBJVertex electrode = electrodes.get(i);
-            float dot_prod = electrode.x * vertex.x + electrode.y * vertex.y + electrode.z * vertex.z;
-
-            double mag_el = Math.sqrt(electrode.x * electrode.x + electrode.y * electrode.y + electrode.z * electrode.z);
-            double mag_v = Math.sqrt(vertex.x * vertex.x + vertex.y * vertex.y + vertex.z * vertex.z);
-
-            double cos = dot_prod / (mag_el * mag_v);
-
-            float angle_rad = (float) Math.acos(cos);
-
-            float angle = (float) Math.toDegrees(angle_rad);
-
-            if (Math.abs(angle) < angle_max) {
-                uk_angle += 100 - angle;
-            }
-        }
-
-        for (int i = 0; i < electrodes.size(); i++) {
-            OBJVertex electrode = electrodes.get(i);
-            float dot_prod = electrode.x * vertex.x + electrode.y * vertex.y + electrode.z * vertex.z;
-
-            double mag_el = Math.sqrt(electrode.x * electrode.x + electrode.y * electrode.y + electrode.z * electrode.z);
-            double mag_v = Math.sqrt(vertex.x * vertex.x + vertex.y * vertex.y + vertex.z * vertex.z);
-
-            double cos = dot_prod / (mag_el * mag_v);
-
-            float angle_rad = (float) Math.acos(cos);
-
-            float angle = (float) Math.toDegrees(angle_rad);
-            //     System.out.println(angle);
-
-            if (Math.abs(angle) < angle_max) {
-                float hue = electrodes_values.get(electrodes_idx).get(i);
-                hue += 50;
-                hue /= 100;
-                hue *= 300;
-                hue /= 360;
-                hue = 1 - hue;
-                int rgb = Color.HSBtoRGB(hue, 1, 1);
-
-                float curr_colors[] = new float[3];
-                curr_colors[0] = (rgb >> 16) & 0xFF;
-                curr_colors[1] = (rgb >> 8) & 0xFF;
-                curr_colors[2] = rgb & 0xFF;
-
-                for (int j = 0; j < colors.length; j++) {
-                    colors[j] += (curr_colors[j] / 255f) * (angle / uk_angle);
-                }
-            }
-        }
-        return colors;
     }
 
     public static void main(String args[]) throws IOException {
@@ -520,7 +472,6 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
                     model.getNormals().size(),
                     model.getTexCoords().size(),
                     model.getObjects().size()));
-
         } catch (IOException ex) {
             Logger.getLogger(HeadImportTest.class
                     .getName()).log(Level.SEVERE, null, ex);
@@ -532,7 +483,9 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
             FileReader fr = new FileReader(voltages);
             BufferedReader br = new BufferedReader(fr);
             String line;
-            br.readLine();
+            frequency = (int)Float.parseFloat(br.readLine().split(" ")[0]);
+            System.out.println("Freq " + frequency);
+            
             int i = 0;
 
             while ((line = br.readLine()) != null) {
@@ -552,9 +505,7 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
                     }
                     electrodes_values.add(curr_values);
                 }
-
             }
-
         } catch (FileNotFoundException ex) {
             Logger.getLogger(HeadImportTest.class
                     .getName()).log(Level.SEVERE, null, ex);
@@ -571,6 +522,7 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
 
                 float fi = Float.parseFloat(split[2]);
                 float teta = Float.parseFloat(split[3]);
+
                 fi = (float) Math.toRadians(fi);
                 teta = (float) Math.toRadians(teta);
 
@@ -589,10 +541,12 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
                     }
                 }
                 if (j < electrodes_in.length) {
-                    electrodes.add(v);
-
+                    electrodes.add(v.x);
+                    electrodes.add(v.y);
+                    electrodes.add(v.z);
+                    //System.out.println(split[2] + " " + split[3]);
+                    //System.out.println(v.x + " " + v.y + " " + v.z);
                 }
-
             }
         } catch (FileNotFoundException ex) {
             Logger.getLogger(HeadImportTest.class
@@ -600,7 +554,7 @@ public class HeadImportTest implements GLEventListener, MouseListener, KeyListen
         }
 
         System.out.println(electrodes.size() + " ");
+        System.out.println(electrodes_values.get(0).size() + " ");
         new HeadImportTest();
     }
-
 }
